@@ -5,89 +5,120 @@ const bodyParser = require('body-parser')
 const cors = require('cors')
 
 app.use(function middleware(req, res, next) {
-console.log(req.method + ' ' + req.path + ' - ' + req.ip)
-next();
+  console.log(req.method + ' ' + req.path + ' - ' + req.ip)
+  next();
 });
 
 const mongoose = require('mongoose')
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true });
 
-var newUser = new mongoose.Schema({
-    "new_user": String,
-    "Id": String,
-    "log" : [{ description: String, duration: Number, date: Date }]
+//create user schema and user table
+var userTableSchema = new mongoose.Schema({
+  "username": String
+});
+var ExerciseUserTable = mongoose.model("ExerciseUser", userTableSchema);
+
+
+
+//create exercise schema and exercise table
+var ExerciseDetailsSchema = new mongoose.Schema({
+  description: String, 
+  duration: Number, 
+  date: Date,
+  userId: String
 });
 
-var createNewUser = mongoose.model("createNewUser", newUser);
+var ExerciseDetailsTable = mongoose.model("ExerciseDetails", ExerciseDetailsSchema);
+
+
+
 
 
 app.use(cors())
 
-app.use(bodyParser.urlencoded({extended: false}))
+app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
 
 
 app.use(express.static('public'))
 
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/views/index.html')
+  res.sendFile(__dirname + '/views/index.html')
 });
 
-app.post('/api/exercise/new-user', function(req, res,next){
-const username = req.body.username;
-//const userId = generateUniqueId(7);   
-  createNewUser.findOne({ "new_user": username}, function (err, datauser) {
-//check if username exists first
-        if (datauser) {
-            res.send("This username is already taken")
-        } else {
-            var userId = GenerateUniqueId(7);
-//saving username and id in db in order to be able to get it after          
-            const newUsernameAndId = new createNewUser({
-              "new_user": username,
-              "Id": userId
-            });
+//create user and return object with username and id
+app.post('/api/exercise/new-user', function (req, res, next) {
+  const username = req.body.username;
+  //const userId = generateUniqueId(7);   
+  ExerciseUserTable.findOne({ "username": username }, function (err, datauser) {
+    //check if username exists first
+    if (datauser) {
+      res.send("This username is already taken")
+    } else {
+     
+      //saving username and id in db in order to be able to get it after          
+      const newUsernameAndId = new ExerciseUserTable({
+        "username": username
+      });
 
-            newUsernameAndId.save();
+      newUsernameAndId.save();
 
-    res.json({"new_user": username, "Id": userId});
-        }
+      console.log(newUsernameAndId);
+      res.json({ "username": newUsernameAndId.username, "Id": newUsernameAndId._id });
+    }
+  });
+});
+
+
+//get all users and return an array with username and id
+app.get('/api/exercise/users', function(req,res){
+  
+  
+})
+
+//add exercise to any user
+app.post('/api/exercise/add', function (req, res) {
+  const username = req.body.username;
+  const userId = req.body.userId;
+  const description = req.body.description;
+  const duration = req.body.duration;
+  const requiredFieldsToComplete = userId && description && duration;
+
+  if (requiredFieldsToComplete) {
+    var user = ExerciseUserTable.findById(userId, function (error, user) {
+      if (error) {
+        res.send(error);
+      }
+      if (user) {
+        const date = (req.body.date) ? new Date(req.body.date) : new Date();
+        const newExercise = { 
+          description: description,
+          duration: duration,
+          date: date,
+          userId: userId 
+        };
+        
+        const newExerciseDetails = new ExerciseDetailsTable(newExercise);
+
+        newExerciseDetails.save();
+        
+        res.json({
+          description: newExerciseDetails.description,
+          duration: newExerciseDetails.duration,
+          date: newExerciseDetails.date,
+          userId: newExerciseDetails.userId,
+          username: user.username
+        
         });
+    
+      }
+    });
+
+  } else {
+    res.send("Please complete Required fields!")
+  }
 });
 
-//generate unique  Id
-function GenerateUniqueId(lengthOfId) {
-   var newId  = '';
-   var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-   var charactersLength = characters.length;
-   for ( var i = 0; i < length; i++ ) {
-      newId += characters.charAt(Math.floor(Math.random() * charactersLength));
-   }
-   return newId;
-};
-
-
-app.post('/api/exercise/add', function(req,res){
-const userId = req.body.userId;
-const description = req.body.description;
-const duration = req.body.duration;
-const date = req.body.date;
-const requiredFieldsToComplete = userId && description && duration;
-
-if(requiredFieldsToComplete == null){
-  res.send("Please complere required fields");
-} else{
-createNewUser.findById(userId, function(error, user){
-if(user){
-
-}
-});
-
-}
-
-
-
-});
 
 
 
@@ -95,7 +126,7 @@ if(user){
 
 // Not found middleware
 app.use((req, res, next) => {
-  return next({status: 404, message: 'not found'})
+  return next({ status: 404, message: 'not found' })
 })
 
 // Error Handling middleware
@@ -115,10 +146,9 @@ app.use((err, req, res, next) => {
   }
   res.status(errCode).type('txt')
     .send(errMessage)
-})
+});
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port)
-})
-
+});
 
